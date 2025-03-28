@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  fullName      String
+  passwordHash  String
+  profileImage  String?
+  isOnline      Boolean   @default(false)
+  lastSeen      DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relationships
+  sentMessages     Message[]  @relation("SentMessages")
+  receivedMessages Message[]  @relation("ReceivedMessages")
+  sentReactions    Reaction[] @relation("SentReactions")
+  groupMemberships GroupMember[]
+  ownedGroups      Group[]    @relation("GroupOwner")
+
+  // Privacy settings
+  hideLastSeen    Boolean   @default(false)
+  hideReadReceipts Boolean  @default(false)
+
+  // Blocked users (many-to-many self-relation)
+  blockedUsers    User[]    @relation("UserBlocks")
+  blockedBy       User[]    @relation("UserBlocks")
+}
+
+model Message {
+  id          String    @id @default(uuid())
+  content     String
+  encrypted   Boolean   @default(true)
+  senderId    String
+  receiverId  String?
+  groupId     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Message properties
+  type        MessageType @default(TEXT)
+  mediaUrl    String?
+  isEdited    Boolean     @default(false)
+  isDeleted   Boolean     @default(false)
+  expiresAt   DateTime?
+  viewOnce    Boolean     @default(false)
+  
+  // Relationships
+  sender      User        @relation("SentMessages", fields: [senderId], references: [id])
+  receiver    User?       @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  group       Group?      @relation(fields: [groupId], references: [id])
+  reactions   Reaction[]
+  replyTo     Message?    @relation("MessageReplies", fields: [replyToId], references: [id])
+  replyToId   String?
+  replies     Message[]   @relation("MessageReplies")
+}
+
+model Group {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  image       String?
+  ownerId     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relationships
+  owner       User        @relation("GroupOwner", fields: [ownerId], references: [id])
+  members     GroupMember[]
+  messages    Message[]
+}
+
+model GroupMember {
+  id        String    @id @default(uuid())
+  userId    String
+  groupId   String
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+
+  // Relationships
+  user      User      @relation(fields: [userId], references: [id])
+  group     Group     @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+}
+
+model Reaction {
+  id        String    @id @default(uuid())
+  type      ReactionType
+  userId    String
+  messageId String
+  createdAt DateTime  @default(now())
+
+  // Relationships
+  user      User      @relation("SentReactions", fields: [userId], references: [id])
+  message   Message   @relation(fields: [messageId], references: [id])
+
+  @@unique([userId, messageId])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+  VOICE_NOTE
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
