@@ -1,44 +1,61 @@
-import { SignJWT, jwtVerify } from 'jose';
 import { z } from 'zod';
-import crypto from 'crypto';
+import { SignJWT, jwtVerify } from 'jose';
+import bcrypt from 'bcryptjs';
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key');
+// Schema for registration validation
+export const registerSchema = z.object({
+  email: z.string().email(),
+  username: z.string().min(3).max(30),
+  fullName: z.string().min(2).max(100),
+  password: z.string().min(8)
+});
 
+// Add login schema
+export const loginSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(1, "Password is required")
+});
+
+// Password encryption
 export async function encrypt(password: string): Promise<string> {
-  return crypto.createHash('sha256').update(password).digest('hex');
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
 }
 
-export async function createToken(userId: string): Promise<string> {
-  return await new SignJWT({ userId })
+// Token creation
+export async function createToken(userId: number): Promise<string> {
+  const secret = new TextEncoder().encode(
+    process.env.JWT_SECRET || 'your-fallback-secret'
+  );
+  
+  const token = await new SignJWT({ id: userId })
     .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
     .setExpirationTime('24h')
     .sign(secret);
+  
+  return token;
 }
 
-export async function verifyToken(token: string) {
+// Token verification
+export async function verifyToken(token: string): Promise<any> {
   try {
-    const verified = await jwtVerify(token, secret);
-    return verified.payload as { userId: string };
-  } catch (err) {
+    const secret = new TextEncoder().encode(
+      process.env.JWT_SECRET || 'your-fallback-secret'
+    );
+    
+    const { payload } = await jwtVerify(token, secret);
+    return payload;
+  } catch (error) {
+    console.error('Token verification failed:', error);
     return null;
   }
 }
 
-export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
-
-export const registerSchema = z.object({
-  email: z.string().email(),
-  username: z.string().min(3).max(20),
-  fullName: z.string().min(2).max(50),
-  password: z.string().min(8),
-});
-
-export const updateProfileSchema = z.object({
-  username: z.string().min(3).max(20).optional(),
-  fullName: z.string().min(2).max(50).optional(),
-  currentPassword: z.string().min(8).optional(),
-  newPassword: z.string().min(8).optional(),
-});
+// Password verification
+export async function verifyPassword(
+  password: string, 
+  hashedPassword: string
+): Promise<boolean> {
+  return bcrypt.compare(password, hashedPassword);
+}
