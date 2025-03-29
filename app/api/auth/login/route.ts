@@ -1,21 +1,22 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { query } from '@/lib/db';
 import { encrypt, createToken, loginSchema } from '@/lib/auth';
-
-const prisma = new PrismaClient();
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const validatedData = loginSchema.parse(body);
 
-    const user = await prisma.user.findUnique({
-      where: { email: validatedData.email }
-    });
+    const result = await query(
+      'SELECT * FROM users WHERE email = $1',
+      [validatedData.email]
+    );
 
-    if (!user || user.passwordHash !== await encrypt(validatedData.password)) {
+    const user = result.rows[0];
+console.log(user,'user')
+    if (!user || user.password_hash !== await encrypt(validatedData.password)) {
       return NextResponse.json(
-        { error: 'Invalid credentials' },
+        { error: 'Invalid credentials',user:user },
         { status: 401 }
       );
     }
